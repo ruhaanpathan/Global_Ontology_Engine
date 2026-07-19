@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Ontology Engine - Architecture Flowchart</title>
+    <!-- Include Mermaid.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h1 {
+            font-size: 28px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #38bdf8;
+            margin: 0 0 10px 0;
+        }
+        p {
+            color: #94a3b8;
+            font-size: 14px;
+            margin: 0;
+            max-width: 600px;
+            text-align: center;
+        }
+        .mermaid-container {
+            background: #1e293b;
+            padding: 30px 50px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border: 1px solid #334155;
+            max-width: 1200px;
+            width: 100%;
+            overflow-x: auto;
+        }
+        .export-btn {
+            margin-top: 30px;
+            padding: 12px 24px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .export-btn:hover {
+            background: #1d4ed8;
+        }
+    </style>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+               useMaxWidth: true,
+               htmlLabels: true,
+               curve: 'basis'
+            }
+        });
+    </script>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Global Ontology Engine Architecture</h1>
+        <p>A full system blueprint of the OSINT Data Ingestion, NLP Processing, and AI LLM Integration pipeline.</p>
+    </div>
+
+    <div class="mermaid-container">
+        <div class="mermaid">
+            graph TD
+                classDef frontend fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff
+                classDef backend fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#fff
+                classDef ai fill:#312e81,stroke:#8b5cf6,stroke-width:2px,color:#fff
+                classDef ext fill:#111827,stroke:#64748b,stroke-width:1px,stroke-dasharray: 5 5,color:#cbd5e1
+
+                subgraph External_Feeds ["Global Intelligence Sources (OSINT)"]
+                    RSS1["Reuters / AP News"] ::: ext
+                    RSS2["Defense / Military Feeds"] ::: ext
+                    RSS3["Economic & Tech Journals"] ::: ext
+                end
+
+                subgraph Backend ["Node.js Backend Engine (server.js)"]
+                    Parser["RSS Parser<br/>(Ingests 30+ Feeds)"] ::: backend
+                    NLP["Compromise.js NLP<br/>(Entity & Verb Extraction)"] ::: backend
+                    Sentiment["Pattern Matching<br/>(Sentiment & Threat Scoring)"] ::: backend
+                    GraphBuilder["Knowledge Graph Compiler<br/>(Nodes, Edges, Confidence)"] ::: backend
+                    
+                    API_Intel["REST API: /api/intelligence<br/>(Serves JSON State)"] ::: backend
+                    API_Proxy["REST API: /api/claude<br/>(LLM Secure Proxy)"] ::: backend
+                    
+                    Parser -->|"Raw Articles"| NLP
+                    NLP -->|"Entities + Actions"| Sentiment
+                    Sentiment -->|"Classified Data"| GraphBuilder
+                    GraphBuilder --> API_Intel
+                end
+
+                RSS1 --> Parser
+                RSS2 --> Parser
+                RSS3 --> Parser
+
+                subgraph Frontend ["Client Browser (Dashboard UI)"]
+                    UI_Dashboard["Main Dashboard UI"] ::: frontend
+                    D3_Graph["D3.js Force Dir. Graph"] ::: frontend
+                    D3_Map["D3.js World Map"] ::: frontend
+                    ChartJS["Chart.js Trend Metrics"] ::: frontend
+                    
+                    StateMgr["Frontend State Manager<br/>(Polls Backend APIs)"] ::: frontend
+                    ClaudeQ["ClaudeQueue Reasoner<br/>(Context Assembler)"] ::: frontend
+                    
+                    StateMgr --> UI_Dashboard
+                    StateMgr --> D3_Graph
+                    StateMgr --> D3_Map
+                    StateMgr --> ChartJS
+                    
+                    UI_Dashboard -->|"User Asks Question"| ClaudeQ
+                    StateMgr -->|"Injects Live Graph Context"| ClaudeQ
+                end
+
+                API_Intel -->|"Sends Live Graph Data"| StateMgr
+
+                subgraph AI_Layer ["Cloud AI Provider"]
+                    Gemini["Google Gemini 2.5 Flash<br/>(Strategic Analysis Modeler)"] ::: ai
+                end
+
+                ClaudeQ -->|"Sends Mega-Prompt + Graph"| API_Proxy
+                API_Proxy -->|"Proxies to bypass CORS & hide key"| Gemini
+                Gemini -->|"Returns JSON Analytical Brief"| API_Proxy
+                API_Proxy -->|"Delivers Payload"| ClaudeQ
+                ClaudeQ -->|"Renders Insights"| UI_Dashboard
+        </div>
+    </div>
+
+    <button class="export-btn" onclick="window.print()">Save as PDF</button>
+
+</body>
+</html>

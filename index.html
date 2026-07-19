@@ -7,6 +7,7 @@
     <title>GOE — Global Ontology Engine | India Strategic Intelligence</title>
     <meta name="description"
         content="AI-powered strategic intelligence platform for India's national advantage. Real-time geopolitical analysis, threat detection, and knowledge graph engine.">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22%231D4ED8%22/><circle cx=%2250%22 cy=%2250%22 r=%2228%22 fill=%22%2338BDF8%22/><circle cx=%2250%22 cy=%2250%22 r=%2212%22 fill=%22white%22/></svg>">
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;700&family=Outfit:wght@600;700;800&display=swap"
         rel="stylesheet">
@@ -679,9 +680,15 @@
         }
 
         /* TABLE */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         .data-table {
             width: 100%;
-            border-collapse: collapse
+            border-collapse: collapse;
         }
 
         .data-table th {
@@ -1409,6 +1416,165 @@
             .gauge-label .val {
                 font-size: 24px;
             }
+
+            /* Canvas charts must be fully responsive */
+            canvas {
+                max-width: 100% !important;
+                height: auto !important;
+            }
+
+            /* Chart wrapper containers */
+            #graphContainer {
+                height: 60vh !important;
+                min-height: 300px;
+            }
+
+            /* World map responsive */
+            #worldMapContainer {
+                height: 220px !important;
+            }
+
+            #worldMapContainer svg {
+                width: 100% !important;
+                height: 100% !important;
+            }
+
+            /* Radar chart container */
+            #radarChart {
+                max-height: 250px !important;
+            }
+
+            /* Strategy & assessment panels */
+            .strategy-assessment-panel,
+            .strategy-content {
+                padding: 12px !important;
+            }
+
+            /* Trade table scroll */
+            .data-table {
+                font-size: 11px;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 6px 8px !important;
+            }
+
+            /* Alliance bars compact */
+            #allianceStrength span:first-child {
+                width: 60px !important;
+                font-size: 10px !important;
+            }
+
+            /* Situation report compact */
+            .sitrep-card {
+                padding: 14px 16px !important;
+            }
+
+            /* Technology grid */
+            .tech-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Opportunities grid */
+            .opportunities-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Detail panel close btn bigger for touch */
+            .detail-close {
+                padding: 10px 14px !important;
+                font-size: 14px !important;
+            }
+
+            /* Topbar right actions */
+            .topbar-right {
+                gap: 6px !important;
+            }
+
+            .topbar-right .btn {
+                padding: 4px 8px !important;
+                font-size: 10px !important;
+            }
+
+            /* Sub-score domain cards */
+            [onclick^="showDomainIntel"] {
+                padding: 8px !important;
+            }
+
+            /* Flex-wrap any row that might overflow */
+            [style*="display:flex"][style*="gap"] {
+                flex-wrap: wrap;
+            }
+        }
+
+        /* ── Small phones (≤480px) ── */
+        @media (max-width: 480px) {
+
+            .main-content {
+                padding: 8px;
+            }
+
+            .card {
+                padding: 12px;
+                border-radius: 8px;
+            }
+
+            .card-value {
+                font-size: 22px;
+            }
+
+            .card-title {
+                font-size: 8.5px;
+            }
+
+            h2 {
+                font-size: 12px !important;
+                letter-spacing: 1px !important;
+            }
+
+            /* Gauges even smaller */
+            svg[width="140"] {
+                width: 110px !important;
+                height: 110px !important;
+            }
+
+            /* Chart height reduction */
+            [style*="height:350px"] {
+                height: 250px !important;
+            }
+
+            [style*="height:280px"] {
+                height: 200px !important;
+            }
+
+            /* Badges compact */
+            .badge {
+                font-size: 8px !important;
+                padding: 2px 5px !important;
+            }
+
+            /* Progress bars */
+            .progress {
+                height: 5px !important;
+            }
+
+            /* Buttons compact */
+            .btn {
+                padding: 5px 10px !important;
+                font-size: 10px !important;
+            }
+
+            .btn-sm {
+                padding: 3px 8px !important;
+                font-size: 9px !important;
+            }
+
+            /* Graph container smaller */
+            #graphContainer {
+                height: 50vh !important;
+                min-height: 250px;
+            }
         }
 
         /* ── Very small (≤380px) ── */
@@ -1423,6 +1589,23 @@
 
             .topbar-left h1 {
                 display: none;
+            }
+
+            .main-content {
+                padding: 6px;
+            }
+
+            .card {
+                padding: 10px;
+            }
+
+            .card-value {
+                font-size: 20px;
+            }
+
+            /* Stack everything */
+            [style*="display:flex"][style*="gap:20px"] {
+                gap: 10px !important;
             }
         }
     </style>
@@ -1701,21 +1884,20 @@
                 updateProcessingIndicator();
                 try {
                     const controller = new AbortController();
-                    const timeout = setTimeout(() => controller.abort(), 15000);
-                    const response = await fetch("https://api.anthropic.com/v1/messages", {
+                    const timeout = setTimeout(() => controller.abort(), 60000); // Increased from 15s to 60s for LLM processing
+                    const response = await fetch("/api/claude", {
                         method: "POST",
                         headers: {
-                            "Content-Type": "application/json",
-                            "anthropic-dangerous-direct-browser-access": "true"
+                            "Content-Type": "application/json"
                         },
                         signal: controller.signal,
                         body: JSON.stringify({
-                            model: "claude-sonnet-4-20250514",
-                            max_tokens: maxTokens,
-                            messages: [{ role: "user", content: prompt }]
+                            prompt: prompt,
+                            maxTokens: maxTokens
                         })
                     });
                     clearTimeout(timeout);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const data = await response.json();
                     return data.content?.[0]?.text || null;
                 } catch (e) {

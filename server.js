@@ -13,12 +13,21 @@ const https = require('https');
 const http = require('http');
 const { parseStringPromise } = require('xml2js');
 const nlp = require('compromise');
+try { require('dotenv').config(); } catch (e) { /* ignore */ }
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
+const path = require('path');
 app.use(cors());
 app.use(express.json());
+// Crucial for Vercel: serve static frontend files instantly when root is requested
+app.use(express.static(__dirname));
+
+// Map the root domain explicitly to the dashboard UI
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // ═══════════════════════════════════════════════════════════════
 // ENTITY DICTIONARY  — NLP recognition map
@@ -103,7 +112,7 @@ const ENTITIES = [
   { name: 'Tejas', type: 'concept', domain: 'defense', aliases: ['Tejas LCA', 'light combat aircraft'] },
   { name: 'Agni', type: 'concept', domain: 'defense', aliases: ['Agni missile', 'ballistic missile', 'ICBM'] },
   { name: 'Semiconductor', type: 'concept', domain: 'technology', aliases: ['chips', 'chip manufacturing', 'fab', 'foundry'] },
-  { name: 'Artificial Intelligence', type: 'concept', domain: 'technology', aliases: ['AI', 'machine learning', 'LLM', 'ChatGPT', 'generative AI'] },
+  { name: 'Artificial Intelligence', type: 'concept', domain: 'technology', aliases: ['Artificial Intelligence', 'machine learning', 'LLM', 'ChatGPT', 'generative AI'] },
   { name: 'BRI', type: 'concept', domain: 'geopolitics', aliases: ["Belt and Road", 'OBOR', 'One Belt'] },
   { name: 'PLI Scheme', type: 'concept', domain: 'economics', aliases: ['Production Linked Incentive', 'PLI'] },
   { name: 'Cryptocurrency', type: 'concept', domain: 'economics', aliases: ['Bitcoin', 'crypto', 'blockchain', 'digital currency'] },
@@ -297,7 +306,19 @@ function extractEntities(text) {
   for (const entity of ENTITIES) {
     const allTerms = [entity.name, ...(entity.aliases || [])];
     for (const term of allTerms) {
-      if (lower.includes(term.toLowerCase())) {
+      if (term.length <= 1) continue; // safety block against raw single letters
+      // We must use strict word boundaries \b to prevent partial matches!
+      // Example: 'US' must not match 'abuses', 'UN' must not match 'University'
+      let isMatch = false;
+      try {
+        const regex = new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+        isMatch = regex.test(text);
+      } catch {
+        // Fallback for special characters that fail boundary logic
+        isMatch = lower.includes(" " + term.toLowerCase() + " ");
+      }
+      
+      if (isMatch) {
         if (!found.has(entity.name)) found.set(entity.name, { ...entity });
         break;
       }
@@ -824,31 +845,126 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// POST /api/claude — AI Gateway Proxy
+app.post('/api/claude', (req, res) => {
+  const { prompt, maxTokens } = req.body;
+  
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt is required' });
+  }
+
+  // Uses Gemini API directly (Fall back to manually reading .env file if package missing)
+  let apiKey = process.env.AI_GATEWAY_API_KEY;
+  if (!apiKey) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const envText = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+      const match = envText.match(/AI_GATEWAY_API_KEY\s*=\s*"?([^"\n]+)"?/);
+      if (match) apiKey = match[1].trim();
+    } catch (fsErr) {
+      console.error('Failed to manually read .env file', fsErr);
+    }
+  }
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'API Key is completely missing' });
+  }
+
+  try {
+    const payload = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+      ],
+      generationConfig: { maxOutputTokens: maxTokens || 3000 }
+    });
+
+    const options = {
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+
+    const request = https.request(options, (response) => {
+      let data = '';
+      response.on('data', (chunk) => { data += chunk; });
+      response.on('end', () => {
+        if (response.statusCode >= 400) {
+          console.error('[Gemini API Error]:', response.statusCode, data);
+          return res.status(500).json({ error: `Gemini Error ${response.statusCode}: ${data}` });
+        }
+        try {
+          const parsed = JSON.parse(data);
+          let resultText = "";
+          
+          if (parsed.candidates && parsed.candidates[0].content) {
+             resultText = parsed.candidates[0].content.parts[0].text;
+          } else {
+             // Handle safety block or empty response
+             console.error('[Gemini Warning] No content returned. Might be safety filter:', JSON.stringify(parsed));
+          }
+
+          console.log('\n[DEBUG] Gemini Raw Output ->\n', resultText, '\n');
+
+          res.json({ content: [{ text: resultText }] });
+        } catch (parseErr) {
+          res.status(500).json({ error: 'JSON Parse Error: ' + parseErr.message });
+        }
+      });
+    });
+
+    request.on('error', (err) => {
+      console.error('[AI Routing Error]:', err.message);
+      res.status(500).json({ error: err.message });
+    });
+
+    request.write(payload);
+    request.end();
+
+  } catch (err) {
+    console.error('[AI Routing Error]:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════
 // START
 // ═══════════════════════════════════════════════════════════════
-app.listen(PORT, async () => {
-  console.log(`\n🌐 GOE Intelligence Server running at http://localhost:${PORT}`);
-  console.log(`📡 Endpoints:`);
-  console.log(`   GET /api/intelligence   — Full pipeline (${RSS_FEEDS.length} feeds, cached 5min)`);
-  console.log(`   GET /api/domain-impact  — Military/Economic/Diplomatic/Political scoring`);
-  console.log(`   GET /api/causal-chains  — Multi-hop causal chain analysis`);
-  console.log(`   GET /api/world-impact   — Country intensity for world map`);
-  console.log(`   GET /api/entity-trends  — Entity mention trends`);
-  console.log(`   GET /api/news?q=china   — Search articles`);
-  console.log(`   GET /api/forex          — Live USD/INR rates`);
-  console.log(`   GET /api/gdp            — India GDP (World Bank)`);
-  console.log(`   GET /api/status         — Health check\n`);
+if (require.main === module) {
+  app.listen(PORT, async () => {
+    console.log(`\n🌐 GOE Intelligence Server running at http://localhost:${PORT}`);
+    console.log(`📡 Endpoints:`);
+    console.log(`   GET /api/intelligence   — Full pipeline (${RSS_FEEDS.length} feeds, cached 5min)`);
+    console.log(`   GET /api/domain-impact  — Military/Economic/Diplomatic/Political scoring`);
+    console.log(`   GET /api/causal-chains  — Multi-hop causal chain analysis`);
+    console.log(`   GET /api/world-impact   — Country intensity for world map`);
+    console.log(`   GET /api/entity-trends  — Entity mention trends`);
+    console.log(`   GET /api/news?q=china   — Search articles`);
+    console.log(`   GET /api/forex          — Live USD/INR rates`);
+    console.log(`   GET /api/gdp            — India GDP (World Bank)`);
+    console.log(`   GET /api/status         — Health check\n`);
 
-  // Pre-warm cache on startup
-  setTimeout(() => {
-    runPipeline().then(d => {
-      console.log(`✅ Pipeline ready: ${d.totalArticles} articles, ${d.threats.length} threats detected`);
-    }).catch(e => console.error('Pipeline warmup failed:', e.message));
-  }, 500);
+    // Pre-warm cache on startup
+    setTimeout(() => {
+      runPipeline().then(d => {
+        console.log(`✅ Pipeline ready: ${d.totalArticles} articles, ${d.threats.length} threats detected`);
+      }).catch(e => console.error('Pipeline warmup failed:', e.message));
+    }, 500);
 
-  // Auto-refresh every 5 minutes
-  setInterval(() => {
-    runPipeline().catch(e => console.error('Auto-refresh failed:', e.message));
-  }, CACHE_TTL);
-});
+    // Auto-refresh every 5 minutes
+    setInterval(() => {
+      runPipeline().catch(e => console.error('Auto-refresh failed:', e.message));
+    }, CACHE_TTL);
+  });
+}
+
+// Export for Vercel Serverless deployments
+module.exports = app;

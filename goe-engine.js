@@ -1,15 +1,16 @@
 // ═══════════════════════════════════════════════════════════════
 // GOE LIVE INTELLIGENCE ENGINE
-// All data is fetched LIVE from the GOE server (localhost:3001)
-// which scrapes real Indian news RSS feeds and processes them via NLP.
+// All data is fetched LIVE from the GOE API pipeline.
+// In dev: uses localhost:3001. On Vercel: uses Serverless Functions natively.
 // ═══════════════════════════════════════════════════════════════
 
-const GOE_SERVER = 'http://localhost:3001';
+const IS_LOCAL = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const GOE_SERVER = IS_LOCAL ? 'http://localhost:3001' : '';
 
 // ─── Server connectivity check ─────────────────────────────────
 async function checkServer() {
   try {
-    const res = await fetch(`${GOE_SERVER}/api/status`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${GOE_SERVER}/api/status`, { signal: AbortSignal.timeout(15000) });
     return res.ok;
   } catch { return false; }
 }
@@ -218,10 +219,61 @@ async function runWhatIf() {
 function exportBrief() {
   const last = GOEState.queryHistory[0];
   if (!last) return;
-  const text = `STRATEGIC INTELLIGENCE BRIEF\nGlobal Ontology Engine — ${new Date().toISOString()}\n\nQUERY: ${last.query}\n\n${last.response}\n\nConfidence: ${last.confidence}%\nGenerated: ${new Date().toLocaleString()}`;
-  const blob = new Blob([text], { type: 'text/plain' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `goe_brief_${Date.now()}.txt`; a.click();
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GOE Strategic Brief - ${new Date().toLocaleDateString()}</title>
+<style>
+  body { font-family: 'Inter', 'Helvetica Neue', sans-serif; background-color: #0b0f19; color: #c9d1d9; line-height: 1.6; padding: 40px; margin: 0; }
+  .document { max-width: 800px; margin: 0 auto; background-color: #131722; padding: 50px 60px; border: 1px solid #2a3143; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+  .header { border-bottom: 2px solid #ff3b5c; padding-bottom: 20px; margin-bottom: 30px; text-align: center; }
+  .classification { color: #ff3b5c; font-weight: bold; font-family: monospace; font-size: 16px; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 20px; text-align: center; }
+  .title { font-size: 26px; color: #00e5cc; margin: 10px 0; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; font-family: monospace; color: #8b949e; margin-bottom: 30px; padding: 15px; background: #0b0f19; border-radius: 6px; border-left: 3px solid #00e5cc; }
+  h3 { color: #4e9af1; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #2a3143; padding-bottom: 8px; margin-top: 30px; }
+  .query-box { font-weight: 600; margin-bottom: 30px; font-size: 18px; color: #ffffff; padding: 15px; background: rgba(78, 154, 241, 0.1); border-radius: 6px; }
+  .response { font-size: 15px; white-space: pre-wrap; margin-bottom: 30px; color: #d1d5db; }
+  .confidence { display: inline-block; padding: 6px 16px; background: rgba(0,229,204,0.1); color: #00e5cc; border: 1px solid rgba(0,229,204,0.3); border-radius: 6px; font-weight: bold; font-size: 14px; box-shadow: 0 0 10px rgba(0,229,204,0.1); }
+  .footer { text-align: center; margin-top: 60px; font-size: 11px; color: #6b7280; border-top: 1px solid #2a3143; padding-top: 20px; text-transform: uppercase; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+  <div class="classification">TOP SECRET // REL INDIA ONLY</div>
+  <div class="document">
+    <div class="header">
+      <div class="title">Strategic Intelligence Brief</div>
+      <div style="font-size: 12px; color: #8b949e; letter-spacing: 1px;">GLOBAL ONTOLOGY ENGINE // COMMAND CENTER</div>
+    </div>
+    
+    <div class="meta">
+      <div><strong>TIMESTAMP:</strong> ${new Date().toISOString()}</div>
+      <div><strong>SOURCE:</strong> GOE Real-Time Matrix</div>
+      <div><strong>MODEL:</strong> OSINT Analysis Pipeline</div>
+      <div><strong>STATUS:</strong> Verified</div>
+    </div>
+
+    <h3>Strategic Query</h3>
+    <div class="query-box">${last.query}</div>
+
+    <h3>AI Analysis & Assessment</h3>
+    <div class="response">${last.response}</div>
+
+    <div class="confidence">AI Confidence Rating: ${last.confidence}%</div>
+  </div>
+  <div class="footer">Generated automatically by GOE Intelligence Core.<br>Not for unclassified dissemination.</div>
+</body>
+</html>`;
+
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+  const a = document.createElement('a'); 
+  a.href = URL.createObjectURL(blob); 
+  a.download = `GOE_Intelligence_Brief_${Date.now()}.html`; 
+  a.click();
 }
+
 
 // ═══════════════ LIVE FEED VIEW ═══════════════
 function renderLiveFeed(mc) {
